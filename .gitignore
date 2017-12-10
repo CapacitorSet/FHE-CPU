@@ -1,3 +1,16 @@
+# Binaries from tools
+tools/*.rpm
+tools/opt
+
+# Test files
+hello
+hello.s
+
+# This is created by CMake.
+Makefile
+
+############### Default stuff below this line
+
 # Prerequisites
 *.d
 
