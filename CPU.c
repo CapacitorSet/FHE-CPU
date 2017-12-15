@@ -40,12 +40,23 @@ bit_t compare8(const bit_t *a, const bit_t *b) {
 	return and(result0123, result4567);
 }
 
-bit_t detectNOP(bit_t *operand) {
-	// 00001111
-	bit_t isFirstHalfZero = and(nor(operand[0], operand[1]), nor(operand[2], operand[3]));
-	bit_t isSecondHalfOne = and(and(operand[4], operand[5]), and(operand[6], operand[7]));
-	return and(isFirstHalfZero, isSecondHalfOne);
+// Optimal functions for comparing unknown bits a1, a2 to known bits b1, b2 (embedded in the name of the function)
+// Note that we make trivial functions in order to make arity errors readable
+#define optimizedCompare_00(a, b) nor(a, b)
+#define optimizedCompare_01(a, b) andny(a, b)
+#define optimizedCompare_10(a, b) andyn(a, b)
+#define optimizedCompare_11(a, b) and(a, b)
+
+// Creates an optimal decoder by simplification
+#define newDetector(name, a0, a1, a2, a3, a4, a5, a6, a7) bit_t detect ## name(bit_t *operand) { \
+	bit_t compare01 = optimizedCompare_ ## a0 ## a1(operand[0], operand[1]); \
+	bit_t compare23 = optimizedCompare_ ## a2 ## a3(operand[2], operand[3]); \
+	bit_t compare45 = optimizedCompare_ ## a4 ## a5(operand[4], operand[5]); \
+	bit_t compare67 = optimizedCompare_ ## a6 ## a7(operand[6], operand[7]); \
+	return and(and(compare01, compare23), and(compare45, compare67));\
 }
+
+newDetector(NOP, 0, 0, 0, 0, 1, 1, 1, 1); // creates "bit_t detectNOP(bit_t *operand)"
 
 CPUState_t doStep(const CPUState_t cpuState) {
 	CPUState_t newState;
