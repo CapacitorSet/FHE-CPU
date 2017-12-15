@@ -2,14 +2,13 @@
 #define FHE_CPU_CPU_H
 
 #include <stdint.h>
+#include "TFHE.h"
 
-typedef uint16_t programCounter_t;
-
-#define PROGRAM_COUNTER_SIZE (16)
+#define BITNESS (16) // 16, 32, 64 bits?
 
 typedef struct {
-	programCounter_t programCounter;
-	char *memory;
+	bit_t *programCounter;
+	bit_t *memory;
 } CPUState_t;
 
 CPUState_t doStep(CPUState_t cpuState);
