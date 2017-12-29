@@ -9,7 +9,7 @@ void constant8(bit_t* dst, const uint8_t src) {
 }
 void constant16(bit_t* dst, const uint16_t src) {
 	for (int i = 0; i < 16; i++)
-		constant(dst[i], (src >> i) & 1);
+		constant(dst[15 - i], (src >> i) & 1); // That's not a typo, 15 is correct.
 }
 
 // Operands
@@ -40,40 +40,6 @@ void getN_thOperandBit(bit_t ret, uint8_t N, bit_t *address, bit_t* memory) {
 	getN_thBit(ret, N, address, BITNESS, memory, 0);
 }
 
-// Rather inefficient. Avoid when comparing to known constants (eg. opcodes)!
-// Requires 8 + 4 + 2 + 1 = 15 logic gates
-void compare8(bit_t dst, const bit_t *a, const bit_t *b) {
-	bit_t result0 = make_bits(1); nxor(result0, a[0], b[0]);
-	bit_t result1 = make_bits(1); nxor(result1, a[1], b[1]);
-	bit_t result2 = make_bits(1); nxor(result2, a[2], b[2]);
-	bit_t result3 = make_bits(1); nxor(result3, a[3], b[3]);
-	bit_t result4 = make_bits(1); nxor(result4, a[4], b[4]);
-	bit_t result5 = make_bits(1); nxor(result5, a[5], b[5]);
-	bit_t result6 = make_bits(1); nxor(result6, a[6], b[6]);
-	bit_t result7 = make_bits(1); nxor(result7, a[7], b[7]);
-	bit_t result01 = make_bits(1); and(result01, result0, result1);
-	bit_t result23 = make_bits(1); and(result23, result2, result3);
-	bit_t result45 = make_bits(1); and(result45, result4, result5);
-	bit_t result67 = make_bits(1); and(result67, result6, result7);
-	bit_t result0123 = make_bits(1); and(result0123, result01, result23);
-	bit_t result4567 = make_bits(1); and(result4567, result45, result67);
-	and(dst, result0123, result4567);
-	free_bits(result0);
-	free_bits(result1);
-	free_bits(result2);
-	free_bits(result3);
-	free_bits(result4);
-	free_bits(result5);
-	free_bits(result6);
-	free_bits(result7);
-	free_bits(result01);
-	free_bits(result23);
-	free_bits(result45);
-	free_bits(result67);
-	free_bits(result0123);
-	free_bits(result4567);
-}
-
 // Optimal functions for comparing unknown bits a1, a2 to known bits b1, b2 (embedded in the name of the function)
 // Note that we make trivial functions in order to make arity errors readable
 #define optimizedCompare_00(dst, a, b) nor(dst, a, b)
@@ -95,31 +61,76 @@ void compare8(bit_t dst, const bit_t *a, const bit_t *b) {
 
 newDetector(NOP, 0, 0, 0, 0, 1, 1, 1, 1); // creates "bit_t detectNOP(bit_t *operand)"
 
+/* The most basic way to do this with FHE would be to create a new variable containing
+ * the PC incremented by two, and then the new counter would be
+ *
+ *     mux(newPC, mustIncrementPC, incrementedPC, oldPC) // i.e. newPC = mustIncrementPC ? incrementedPC : oldPC
+ *
+ * However, if the PC is N bytes long, that would require 2*N binary gates to do the addition
+ * and then N mux gates to do the multiplexing.
+ * We can use a clever trick instead: increment by (mustIncrementPC ? 2 : 0). By doing
+ * this, it takes us __just__ 2*N gates for the addition!
+ */
+void advancePCByTwo(bit_t **outProgCtr, const bit_t *inProgCtr, const bit_t mustIncrementPC) {
+	constant((*outProgCtr)[0], 0);
+	//copy((*outProgCtr)[0], inProgCtr[0]); // Since we're adding two, the first bit is unchanged.
+	/* Note that since we're adding 0b0000...00010 to a number, we don't need to implement a
+	 * full adder, a half adder will do (the second bit has A = input, B = 1, the others have
+	 * A = input, B = carry in)
+	 */
+	// Sum = A xor B
+	// Carry = A and B
+	bit_t carry = make_bits(1);
+	copy(carry, mustIncrementPC); // This is the core of the no-mux optimization described above.
+
+	bit_t newCarry = make_bits(1);
+	for (int i = 1; i < BITNESS; i++) {
+		xor((*outProgCtr)[i], inProgCtr[i], carry);
+		and(newCarry, inProgCtr[i], carry);
+		copy(carry, newCarry);
+	}
+
+	free_bits(carry);
+	free_bits(newCarry);
+}
+
 CPUState_t doStep(const CPUState_t cpuState) {
 	CPUState_t newState;
+	newState.programCounter = malloc(BITNESS * sizeof(bit_t)); initialize(newState.programCounter, BITNESS);
+
 	const bit_t *address = cpuState.programCounter;
 	bit_t *memory = cpuState.memory;
 	bit_t operand[8]; initialize(operand, 8);
 	for (uint8_t i = 0; i < 8; i++)
 		getN_thOperandBit(operand[i], i, address, memory);
 
-	bit_t mustIncrementProgramCounterByTwo = 0;
+	bit_t mustIncrementProgramCounterByTwo = make_bits(1);
+	constant(mustIncrementProgramCounterByTwo, 0);
 
 #ifndef WITHOUT_NOP
 	// Detect NOP
 	bit_t isNOP = make_bits(1);
 	detectNOP(isNOP, operand);
 
-	printf("Am I at NOP? %s!", isNOP ? "Yes" : "No");
-	// mustIncrementProgramCounterByTwo = or(mustIncrementProgramCounterByTwo, isNOP);
-	// tmp = PC + 2 (skip opcode + unused byte)
-	// PC = mux(isNOP, tmp, PC)
+	printf("Am I at NOP? %s!\n", (*isNOP) ? "Yes" : "No");
+	inplace_or(mustIncrementProgramCounterByTwo, isNOP);
 	free_bits(isNOP);
 #endif
 
+	printf("Must increment PC? %d.\n", *mustIncrementProgramCounterByTwo);
+
+	advancePCByTwo(&(newState.programCounter), cpuState.programCounter, mustIncrementProgramCounterByTwo);
+
+	free_bits(mustIncrementProgramCounterByTwo);
+
 	// We don't want to leak memory on every loop, do we?
 	free_bits_array(cpuState.programCounter, BITNESS);
-	free_bits(cpuState.programCounter);
+	free(cpuState.programCounter);
+	/* This would be the right thing to do, but also fucking wasteful.
 	free_bits_array(cpuState.memory, (1 << BITNESS) * 8);
-	free_bits(cpuState.memory);
+	free(cpuState.memory);
+	*/
+	newState.memory = cpuState.memory;
+
+	return newState;
 }

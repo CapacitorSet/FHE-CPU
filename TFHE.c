@@ -29,12 +29,31 @@ void constant(bit_t dst, const int src) {
 	*dst = src;
 }
 
+void not(bit_t dst, const bit_t a) {
+	*dst = !*a;
+}
+
 void and(bit_t dst, const bit_t a, const bit_t b) {
 	*dst = *a && *b;
 }
 
+void or(bit_t dst, const bit_t a, const bit_t b) {
+	*dst = *a || *b;
+}
+
+// Todo: is this really needed, or can we just or(dst, dst, b)?
+void inplace_or(bit_t dst, const bit_t b) {
+	bit_t tmp = make_bits(1);
+	or(tmp, dst, b);
+	copy(dst, tmp);
+}
+
 void nor(bit_t dst, const bit_t a, const bit_t b) {
 	*dst = !(*a || *b);
+}
+
+void xor(bit_t dst, const bit_t a, const bit_t b) {
+	*dst = *a ^ *b;
 }
 
 void nxor(bit_t dst, const bit_t a, const bit_t b) {

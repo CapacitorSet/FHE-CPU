@@ -18,7 +18,6 @@ int main(int argc, char const *argv[]) {
 	cpuState.memory = malloc((1 << BITNESS) * 8 * sizeof(bit_t)); initialize(cpuState.memory, (1 << BITNESS) * 8);
 	for (int i = 0; i < BITNESS; i++)
 		constant(cpuState.programCounter[i], 0);
-	initializeOpcodes();
 	// NOP = 00001111xxxxxxxx
 	// Todo: copy program code into memory.
 	free(code); // <-- Todo: then do this
@@ -28,9 +27,17 @@ int main(int argc, char const *argv[]) {
 	 * of bit_t, and bit_t is a char*, so the memory is effectively an array of pointers. Overwriting them
 	 * "raw" means leaking these pointers (in a rather unusual fashion, by the way).
 	 */
-	memcpy(cpuState.memory, instr, 16 * sizeof(bit_t));
+	for (int i = 0; i < 16; i++)
+		cpuState.memory[i] = instr[i];
+	// memcpy(cpuState.memory, instr, 16 * sizeof(bit_t));
 
-	cpuState = doStep(cpuState);
+	for (int i = 0; i < 4; i++) {
+		cpuState = doStep(cpuState);
+
+		for (int i = BITNESS; i --> 0;)
+			printf("%d", *cpuState.programCounter[i]);
+		puts("");
+	}
 
 	return 0;
 }
