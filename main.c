@@ -18,6 +18,8 @@ int main(int argc, char const *argv[]) {
 	cpuState.memory = malloc((1 << BITNESS) * 8 * sizeof(bit_t)); initialize(cpuState.memory, (1 << BITNESS) * 8);
 	for (int i = 0; i < BITNESS; i++)
 		constant(cpuState.programCounter[i], 0);
+	for (int i = 0; i < (8 * (1 << BITNESS)); i++)
+		constant(cpuState.memory[i], 0);
 	// NOP = 00001111xxxxxxxx
 	// Todo: copy program code into memory.
 	free(code); // <-- Todo: then do this
@@ -28,8 +30,8 @@ int main(int argc, char const *argv[]) {
 	 * "raw" means leaking these pointers (in a rather unusual fashion, by the way).
 	 */
 	for (int i = 0; i < 16; i++)
-		cpuState.memory[i] = instr[i];
-	// memcpy(cpuState.memory, instr, 16 * sizeof(bit_t));
+		copy(cpuState.memory[i], instr[i]);
+	free_bits_array(instr, 16);
 
 	for (int i = 0; i < 4; i++) {
 		cpuState = doStep(cpuState);
@@ -38,6 +40,9 @@ int main(int argc, char const *argv[]) {
 			printf("%d", *cpuState.programCounter[i]);
 		puts("");
 	}
+
+	free_bits_array(cpuState.programCounter, BITNESS);
+	free_bits_array(cpuState.memory, 8 * (1 << BITNESS));
 
 	return 0;
 }

@@ -46,6 +46,7 @@ void inplace_or(bit_t dst, const bit_t b) {
 	bit_t tmp = make_bits(1);
 	or(tmp, dst, b);
 	copy(dst, tmp);
+	free_bits(tmp);
 }
 
 void nor(bit_t dst, const bit_t a, const bit_t b) {
