@@ -1,24 +1,36 @@
 #ifndef FHE_CPU_TFHE_H
 #define FHE_CPU_TFHE_H
 
-#define STUB_ROOT_DATATYPE char // Ciphertexts are emulated as a pointer. A pointer to what data type?
-typedef STUB_ROOT_DATATYPE* bit_t;
+#include <tfhe/tfhe.h>
+#define DEBUG 1
 
-void initialize(bit_t* dst, int size);
+const TFheGateBootstrappingCloudKeySet* bk;
+const TFheGateBootstrappingParameterSet* params;
+#if DEBUG
+TFheGateBootstrappingSecretKeySet* secret_key;
+#endif
+typedef LweSample* bit_t;
+typedef LweSample* bits_t;
+
+void tfhe_setup();
+
+
 bit_t make_bits(int N);
 void free_bits(bit_t item);
-void free_bits_array(bit_t *item, int size);
+void free_bits_array(bits_t item, int size);
 
 void constant(bit_t dst, int src);
 
-void not(bit_t dst, bit_t a);
-void and(bit_t dst, bit_t a, bit_t b);
-void nand(bit_t dst, bit_t a, bit_t b);
-void or(bit_t dst, bit_t a, bit_t b);
-void inplace_or(bit_t dst, bit_t b);
-void nor(bit_t dst, bit_t a, bit_t b);
-void xor(bit_t dst, bit_t a, bit_t b);
-void nxor(bit_t dst, bit_t a, bit_t b);
+void _not(bit_t dst, bit_t a);
+void _and(bit_t dst, bit_t a, bit_t b);
+void _andyn(bit_t dst, bit_t a, bit_t b);
+void _andny(bit_t dst, bit_t a, bit_t b);
+void _nand(bit_t dst, bit_t a, bit_t b);
+void _or(bit_t dst, bit_t a, bit_t b);
+void inplace_or(bit_t dst, bit_t const b);
+void _nor(bit_t dst, bit_t a, bit_t b);
+void _xor(bit_t dst, bit_t a, bit_t b);
+void _nxor(bit_t dst, bit_t a, bit_t b);
 
 void mux(bit_t dst, bit_t cond, bit_t a, bit_t b);
 void copy(bit_t dst, bit_t src);

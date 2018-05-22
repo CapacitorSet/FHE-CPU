@@ -5,16 +5,14 @@
 #include "TFHE.h"
 
 #define BITNESS (4) // 16, 32, 64 bits?
+#define MEMSIZE ((1 << BITNESS) * 8) // Number of addressable bytes, times the number of bits in a byte.
 
 typedef struct {
-	bit_t *programCounter;
-	bit_t *memory;
+	bits_t programCounter;
+	bits_t memory;
 } CPUState_t;
 
-void constant8(bit_t *dst, uint8_t src);
-void constant16(bit_t *dst, uint16_t src);
-
-void initializeOpcodes(void);
+void constant16(bit_t dst, uint16_t src);
 
 CPUState_t doStep(const CPUState_t cpuState);
 
