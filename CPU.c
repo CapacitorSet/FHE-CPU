@@ -3,6 +3,7 @@
 #include <malloc.h>
 #include <assert.h>
 #include "CPU.h"
+#include "debug.h"
 
 void constant16(bit_t dst, const uint16_t src) {
 	for (int i = 0; i < 16; i++)
@@ -19,9 +20,9 @@ void getN_thBit(bit_t ret, uint8_t N, const bit_t address, uint8_t bitsInAddress
 		    &staticOffset[8 * (dynamicOffset    ) + N]);
 		return;
 	}
-#if DEBUG
+#if TRIVIAL_getNth_bit
 	// Avoids branching, doing simple recursion instead
-	int bit = bootsSymDecrypt(&address[bitsInAddress - 1], secret_key);
+	int bit = bootsSymDecrypt(&address[bitsInAddress - 1]);
 	if (bit) {
 		getN_thBit(ret, N, address, bitsInAddress - 1, staticOffset, dynamicOffset + (1 << (bitsInAddress - 1)));
 	} else {
@@ -122,7 +123,7 @@ CPUState_t doStep(const CPUState_t cpuState) {
 #if DEBUG
 	printf("PC: ");
 	for (uint8_t i = BITNESS; i --> 0; )
-		printf("%d", bootsSymDecrypt(&address[i], secret_key));
+		printf("%d", decrypt(&address[i]));
 	printf("\n");
 	for (uint8_t i = 0; i < 8; i++)
 		getN_thOperandBit(&operand[i], i, address, memory);
@@ -136,14 +137,14 @@ CPUState_t doStep(const CPUState_t cpuState) {
 #if DEBUG
 	printf("Operand: ");
 	for (uint8_t i = 0; i < 8; i++)
-		printf("%d", bootsSymDecrypt(&operand[i], secret_key));
+		printf("%d", decrypt(&operand[i]));
 	printf("\n");
 #endif
 
 	bit_t isNOP = make_bits(1);
 	detectNOP(isNOP, operand);
 #if DEBUG
-	printf("Is NOP? %d.\n", bootsSymDecrypt(isNOP, secret_key));
+	printf("Is NOP? %d.\n", decrypt(isNOP));
 #endif
 	inplace_or(mustIncrementProgramCounterByTwo, isNOP);
 	free_bits(isNOP);
@@ -151,7 +152,7 @@ CPUState_t doStep(const CPUState_t cpuState) {
 	bit_t isNOT = make_bits(1);
 	detectNOT(isNOT, operand);
 #if DEBUG
-	printf("Is NOT? %d.\n", bootsSymDecrypt(isNOT, secret_key));
+	printf("Is NOT? %d.\n", decrypt(isNOT));
 #endif
 	// Syntax: NOT $rA $rB
 	// $rA <- ~$rB

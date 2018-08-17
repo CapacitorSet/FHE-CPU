@@ -1,5 +1,6 @@
 #include "compile_time_settings.h"
 #include <stdio.h>
+#include "debug.h"
 #if !IS_PLAINTEXT
 #include <tfhe/tfhe_io.h>
 #include <tfhe/tfhe.h>
@@ -47,15 +48,9 @@ int main(int argc, char const *argv[]) {
 
 #if DEBUG
 		printf("Finish step. New PC: ");
-		for (int j = BITNESS; j --> 0;)
-			printf("%d", bootsSymDecrypt(&cpuState.programCounter[j], secret_key));
-		printf("\nMemory:");
-		for (int j = 0; j < MEMSIZE; j++) {
-			if (j % 16 == 0)
-				putchar(' ');
-			printf("%d", bootsSymDecrypt(&cpuState.memory[j], secret_key));
-		}
-		puts("");
+		printLE(cpuState.programCounter, BITNESS);
+		printf("\nMemory: \n");
+		printLongBE(cpuState.memory, MEMSIZE);
 		puts("-----------------");
 #endif
 	}
