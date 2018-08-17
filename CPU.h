@@ -1,6 +1,7 @@
 #ifndef FHE_CPU_CPU_H
 #define FHE_CPU_CPU_H
 
+#include "compile_time_settings.h"
 #include <stdint.h>
 #include "TFHE.h"
 

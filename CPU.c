@@ -1,3 +1,4 @@
+#include "compile_time_settings.h"
 #include <stdio.h>
 #include <malloc.h>
 #include <assert.h>
