@@ -6,8 +6,22 @@ tools/opt
 hello
 hello.s
 
-# This is created by CMake.
+# CMake stuff
 Makefile
+CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
+FHE_CPU.cbp
+
+# CLion stuff
+.idea
+
+# Binary
+FHE_CPU
+
+# Keys
+cloud.key
+secret.key
 
 ############### Default stuff below this line
 
