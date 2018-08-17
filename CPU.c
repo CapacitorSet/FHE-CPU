@@ -122,22 +122,24 @@ CPUState_t doStep(const CPUState_t cpuState) {
 
 #if DEBUG
 	printf("PC: ");
-	for (uint8_t i = BITNESS; i --> 0; )
-		printf("%d", decrypt(&address[i]));
+	printLE(address, BITNESS);
 	printf("\n");
-	for (uint8_t i = 0; i < 8; i++)
-		getN_thOperandBit(&operand[i], i, address, memory);
 #endif
 
 	// Utility variables
 	bit_t srcReg = make_bits(4), dstReg = make_bits(4); // Used eg. in "NOT $rA $rB"
+	for (int i = 0; i < 4; i++) {
+		constant(&srcReg[i], 0);
+		constant(&dstReg[i], 0);
+	}
 	bit_t mustIncrementProgramCounterByTwo = make_bits(1);
 	constant(mustIncrementProgramCounterByTwo, 0);
 
+	for (uint8_t i = 0; i < 8; i++)
+		getN_thOperandBit(&operand[i], i, address, memory);
 #if DEBUG
 	printf("Operand: ");
-	for (uint8_t i = 0; i < 8; i++)
-		printf("%d", decrypt(&operand[i]));
+	printBE(operand, 8);
 	printf("\n");
 #endif
 
@@ -172,6 +174,12 @@ CPUState_t doStep(const CPUState_t cpuState) {
 		free_bits(isNOT);
 	}
 
+	printf("Src reg: ");
+	printBE(srcReg, 4);
+	putchar('\n');
+	printf("Dst reg: ");
+	printBE(dstReg, 4);
+	putchar('\n');
 	// printf("Increment PC: %s\n", (*mustIncrementProgramCounterByTwo) ? "Yes" : "No");
 
 	advancePCByTwo(newState.programCounter, cpuState.programCounter, mustIncrementProgramCounterByTwo);
