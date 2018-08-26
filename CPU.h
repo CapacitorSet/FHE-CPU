@@ -8,6 +8,7 @@
 typedef struct {
 	bits_t programCounter;
 	bits_t memory;
+	bits_t registers;
 } CPUState_t;
 
 void constant16(bit_t dst, uint16_t src);

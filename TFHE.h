@@ -64,7 +64,6 @@ void _or(bit_t dst, bit_t a, bit_t b);
 void inplace_or(bit_t dst, bit_t const b);
 void _nor(bit_t dst, bit_t a, bit_t b);
 void _xor(bit_t dst, bit_t a, bit_t b);
-void _nxor(bit_t dst, bit_t a, bit_t b);
 
 void mux(bit_t dst, bit_t cond, bit_t a, bit_t b);
 void copy(bit_t dst, bit_t src);

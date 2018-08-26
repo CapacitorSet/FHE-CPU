@@ -2,31 +2,83 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <assert.h>
+#include <stdbool.h>
 #include "CPU.h"
 #include "debug.h"
+#include "utils.h"
 
-void constant16(bit_t dst, const uint16_t src) {
-	for (int i = 0; i < 16; i++)
-		constant(&dst[i], (src >> (15 - i)) & 1);
+/* Puts into an array staticOffset, at the `address`, at the Nth bit in the word, a bit `src`
+ */
+void putN_thBit(bit_t src, uint8_t N, uint8_t wordsize, const bit_t address, uint8_t bitsInAddress, const bit_t staticOffset, size_t dynamicOffset, bit_t mask) {
+	assert(N < wordsize);
+	if (bitsInAddress == 1) {
+		assert((8*(dynamicOffset+1) + N) < MEMSIZE); // Assert that the write won't be out of bounds
+		bit_t bit;
+		bit = &staticOffset[wordsize * (dynamicOffset    ) + N];
+		bit_t lowerMask = make_bits(1);
+		_andyn(lowerMask, mask, &address[0]);
+		mux(bit, lowerMask, src, bit);
+		free_bits(lowerMask);
+
+		bit = &staticOffset[wordsize * (dynamicOffset + 1) + N];
+		bit_t upperMask = make_bits(1);
+		_and(upperMask, mask, &address[0]);
+		mux(bit, upperMask, src, bit);
+		free_bits(lowerMask);
+		return;
+	}
+	// Would branching result in an offset so high it will read out of bounds?
+	/* This can naturally happen if an instruction is reading one word ahead (eg.
+	 * to read the argument). getN_thbit will scan the entire memory, and when
+	 * it scans the last word, the branch "read one word ahead" will overflow.
+	 * As a consequence of this, if the machine intentionally reads out of bounds
+	 * it will read zeros rather than segfaulting - but you would never want to
+	 * read past the memory size, right?
+	 */
+	int willBranchOverflow = (N + 8 * (1 + dynamicOffset + (1 << (bitsInAddress - 1)))) >= MEMSIZE;
+	if (willBranchOverflow) {
+		// If yes, force the result to stay in bounds: return the lower branch only.
+		putN_thBit(src, N, wordsize, address, bitsInAddress - 1, staticOffset, dynamicOffset, mask);
+		return;
+	}
+	bit_t upperMask = make_bits(1);
+	_and(upperMask, mask, &address[bitsInAddress - 1]);
+#if TRIVIAL_putNth_bit
+	if (decrypt(upperMask))
+#endif
+	putN_thBit(src, N, wordsize, address, bitsInAddress - 1, staticOffset, dynamicOffset + (1 << (bitsInAddress - 1)), upperMask);
+	free_bits(upperMask);
+
+	bit_t lowerMask = make_bits(1);
+	_andyn(lowerMask, mask, &address[bitsInAddress - 1]);
+#if TRIVIAL_putNth_bit
+	if (decrypt(lowerMask))
+#endif
+	putN_thBit(src, N, wordsize, address, bitsInAddress - 1, staticOffset, dynamicOffset, lowerMask);
+	free_bits(lowerMask);
 }
 
 /* Puts into ret the Nth bit of a variable at a given `address` into a memory `staticOffset`
  */
-void getN_thBit(bit_t ret, uint8_t N, const bit_t address, uint8_t bitsInAddress, const bit_t staticOffset, size_t dynamicOffset) {
+void getN_thBit(bit_t ret, uint8_t N, uint8_t wordsize, const bit_t address, uint8_t bitsInAddress, const bit_t staticOffset, size_t dynamicOffset) {
+	/* The assertion should be there, but it's also useful sometimes to override
+	 * it (eg. reading operand). Maybe I'll add it in sometime.
+	 */
+	// assert(N < wordsize);
 	if (bitsInAddress == 1) {
 		assert((8*(dynamicOffset+1) + N) < MEMSIZE); // Assert that the read won't be out of bounds
 		mux(ret, &address[0],
-		    &staticOffset[8 * (dynamicOffset + 1) + N],
-		    &staticOffset[8 * (dynamicOffset    ) + N]);
+		    &staticOffset[wordsize * (dynamicOffset + 1) + N],
+		    &staticOffset[wordsize * (dynamicOffset    ) + N]);
 		return;
 	}
 #if TRIVIAL_getNth_bit
 	// Avoids branching, doing simple recursion instead
-	int bit = bootsSymDecrypt(&address[bitsInAddress - 1]);
+	int bit = decrypt(&address[bitsInAddress - 1]);
 	if (bit) {
-		getN_thBit(ret, N, address, bitsInAddress - 1, staticOffset, dynamicOffset + (1 << (bitsInAddress - 1)));
+		getN_thBit(ret, N, wordsize, address, bitsInAddress - 1, staticOffset, dynamicOffset + (1 << (bitsInAddress - 1)));
 	} else {
-		getN_thBit(ret, N, address, bitsInAddress - 1, staticOffset, dynamicOffset);
+		getN_thBit(ret, N, wordsize, address, bitsInAddress - 1, staticOffset, dynamicOffset);
 	}
 #else
 	// Would branching result in an offset so high it will read out of bounds?
@@ -40,13 +92,13 @@ void getN_thBit(bit_t ret, uint8_t N, const bit_t address, uint8_t bitsInAddress
 	int willBranchOverflow = (N + 8 * (1 + dynamicOffset + (1 << (bitsInAddress - 1)))) >= MEMSIZE;
 	if (willBranchOverflow) {
 		// If yes, force the result to stay in bounds: return the lower branch only.
-		getN_thBit(ret, N, address, bitsInAddress - 1, staticOffset, dynamicOffset);
+		getN_thBit(ret, N, wordsize, address, bitsInAddress - 1, staticOffset, dynamicOffset);
 		return;
 	}
 	bit_t a = make_bits(1);
-	getN_thBit(a, N, address, bitsInAddress - 1, staticOffset, dynamicOffset + (1 << (bitsInAddress - 1)));
+	getN_thBit(a, N, wordsize, address, bitsInAddress - 1, staticOffset, dynamicOffset + (1 << (bitsInAddress - 1)));
 	bit_t b = make_bits(1);
-	getN_thBit(b, N, address, bitsInAddress - 1, staticOffset, dynamicOffset);
+	getN_thBit(b, N, wordsize, address, bitsInAddress - 1, staticOffset, dynamicOffset);
 	mux(ret, &address[bitsInAddress - 1], a, b);
 	free_bits(a);
 	free_bits(b);
@@ -55,29 +107,11 @@ void getN_thBit(bit_t ret, uint8_t N, const bit_t address, uint8_t bitsInAddress
 
 // Knowing that the operand is at location `address` in the array `memory`, put its Nth bit in `ret`
 void getN_thOperandBit(bit_t ret, uint8_t N, bit_t address, bit_t memory) {
-	getN_thBit(ret, N, address, BITNESS, memory, 0);
+	getN_thBit(ret, N, 8, address, BITNESS, memory, 0);
 }
 
-// Optimal functions for comparing unknown bits a1, a2 to known bits b1, b2 (embedded in the name of the function)
-#define optimizedCompare_00 _nor
-#define optimizedCompare_01 _andny
-#define optimizedCompare_10 _andyn
-#define optimizedCompare_11 _and
-
-// Creates an optimal decoder by simplification
-#define newDetector(name, a0, a1, a2, a3, a4, a5, a6, a7) void detect ## name(bit_t ret, const bit_t operand) { \
-	bit_t compare01 = make_bits(1); optimizedCompare_ ## a0 ## a1(compare01, &operand[0], &operand[1]); \
-	bit_t compare23 = make_bits(1); optimizedCompare_ ## a2 ## a3(compare23, &operand[2], &operand[3]); \
-	bit_t compare45 = make_bits(1); optimizedCompare_ ## a4 ## a5(compare45, &operand[4], &operand[5]); \
-	bit_t compare67 = make_bits(1); optimizedCompare_ ## a6 ## a7(compare67, &operand[6], &operand[7]); \
-	bit_t compare0123 = make_bits(1); _and(compare0123, compare01, compare23); \
-	bit_t compare4567 = make_bits(1); _and(compare4567, compare45, compare67); \
-	_and(ret, compare0123, compare4567);\
-	free(compare01); free(compare23); free(compare45); free(compare67); free(compare0123); free(compare4567); \
-}
-
-newDetector(NOP, 0, 0, 0, 0, 1, 1, 1, 1); // creates "bit_t detectNOP(bit_t *operand)"
-newDetector(NOT, 0, 0, 1, 0, 1, 1, 0, 0);
+optDetector(NOP, 0, 0, 0, 0, 1, 1, 1, 1); // creates "bit_t detectNOP(bit_t *operand)"
+optDetector(NOT, 0, 0, 1, 0, 1, 1, 0, 0);
 
 /* The most basic way to do this with FHE would be to create a new variable containing
  * the PC incremented by two, and then the new counter would be
@@ -115,6 +149,7 @@ void advancePCByTwo(bit_t outProgCtr, const bit_t inProgCtr, const bit_t mustInc
 CPUState_t doStep(const CPUState_t cpuState) {
 	CPUState_t newState;
 	newState.programCounter = make_bits(BITNESS);
+	newState.registers = make_bits(NUMREGISTERS * REGISTERSIZE);
 
 	bit_t address = cpuState.programCounter;
 	bit_t memory = cpuState.memory;
@@ -127,10 +162,10 @@ CPUState_t doStep(const CPUState_t cpuState) {
 #endif
 
 	// Utility variables
-	bit_t srcReg = make_bits(4), dstReg = make_bits(4); // Used eg. in "NOT $rA $rB"
+	bit_t srcRegNum = make_bits(4), dstRegNum = make_bits(4); // Used eg. in "NOT $rA $rB"
 	for (int i = 0; i < 4; i++) {
-		constant(&srcReg[i], 0);
-		constant(&dstReg[i], 0);
+		constant(&srcRegNum[i], 0);
+		constant(&dstRegNum[i], 0);
 	}
 	bit_t mustIncrementProgramCounterByTwo = make_bits(1);
 	constant(mustIncrementProgramCounterByTwo, 0);
@@ -149,7 +184,6 @@ CPUState_t doStep(const CPUState_t cpuState) {
 	printf("Is NOP? %d.\n", decrypt(isNOP));
 #endif
 	inplace_or(mustIncrementProgramCounterByTwo, isNOP);
-	free_bits(isNOP);
 
 	bit_t isNOT = make_bits(1);
 	detectNOT(isNOT, operand);
@@ -162,29 +196,59 @@ CPUState_t doStep(const CPUState_t cpuState) {
 		bit_t A = make_bits(4);
 		for (int i = 0; i < 4; i++) {
 			getN_thOperandBit(&A[i], 8 + i, address, memory);
-			mux(&dstReg[i], isNOT, &A[i], &dstReg[i]);
+			mux(&dstRegNum[i], isNOT, &A[i], &dstRegNum[i]);
 		}
 		bit_t B = make_bits(4);
-		for (int i = 0; i < 4; i++) {
+		for (uint8_t i = 0; i < 4; i++) {
 			getN_thOperandBit(&B[i], 8 + 4 + i, address, memory);
-			mux(&srcReg[i], isNOT, &B[i], &srcReg[i]);
+			mux(&srcRegNum[i], isNOT, &B[i], &srcRegNum[i]);
 		}
 
 		inplace_or(mustIncrementProgramCounterByTwo, isNOT);
-		free_bits(isNOT);
 	}
 
 	printf("Src reg: ");
-	printBE(srcReg, 4);
+	printBE(srcRegNum, 4);
 	putchar('\n');
 	printf("Dst reg: ");
-	printBE(dstReg, 4);
+	printBE(dstRegNum, 4);
 	putchar('\n');
-	// printf("Increment PC: %s\n", (*mustIncrementProgramCounterByTwo) ? "Yes" : "No");
+
+	for (int i = 0; i < NUMREGISTERS * REGISTERSIZE; i++) {
+		copy(&newState.registers[i], &cpuState.registers[i]);
+	}
+
+	printf("Src reg contents: ");
+	for (uint8_t i = 0; i < REGISTERSIZE; i++) {
+		// Fetching srcBit
+		bit_t srcBit = make_bits(1);
+		// The code below is only valid for 4-bit register addresses!
+#if NUMREGISTERS != (1 << 4)
+#error Unsupported!
+#endif
+		getN_thBit(srcBit, i, REGISTERSIZE, srcRegNum, 4, cpuState.registers, 0);
+
+		// Computing bit value
+		bit_t dstBit = make_bits(1);
+		bit_t NOTedBit = make_bits(1);
+		_not(NOTedBit, srcBit);
+		// Note the implicit copy from src here.
+		mux(dstBit, isNOT, NOTedBit, srcBit);
+
+		// Writing dstBit
+		bit_t mask = make_bits(1);
+		// Todo: mask = isNOT | ...
+		copy(mask, isNOT);
+		putN_thBit(dstBit, i, REGISTERSIZE, dstRegNum, 4, newState.registers, 0, mask);
+	}
+
+	putchar('\n');
 
 	advancePCByTwo(newState.programCounter, cpuState.programCounter, mustIncrementProgramCounterByTwo);
 
 	free_bits(mustIncrementProgramCounterByTwo);
+	free_bits(isNOP);
+	free_bits(isNOT);
 
 	// We don't want to leak memory on every loop, do we?
 	free_bits_array(cpuState.programCounter, BITNESS);
